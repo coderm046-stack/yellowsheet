@@ -35,10 +35,10 @@ if uploaded_file:
         fetch_subj_map = {f'SUB{i+1}': f'Sub{i+1}' for i in range(6)}
 
         exam_configs = [
-            {'label': 'FIRST UNIT TEST (25)', 'sheets': ['FIRST UNIT TEST']},
-            {'label': 'FIRST TERM EXAM (50)', 'sheets': ['FIRST TERM']},
+            {'label': 'FIRST UNIT TEST (25)',  'sheets': ['FIRST UNIT TEST']},
+            {'label': 'FIRST TERM EXAM (50)',  'sheets': ['FIRST TERM']},
             {'label': 'SECOND UNIT TEST (25)', 'sheets': ['SECOND UNIT TEST']},
-            {'label': 'ANNUAL EXAM (70/80)', 'sheets': ['ANNUAL EXAM']}
+            {'label': 'ANNUAL EXAM (70/80)',   'sheets': ['ANNUAL EXAM']}
         ]
 
         result_cols = ['Grand Total', '%', 'Result', 'Remark', 'Rank']
@@ -59,29 +59,38 @@ if uploaded_file:
                         continue
                     if roll not in all_students:
                         all_students[roll] = {'Name': row.get('STUDENT NAME', 'Unknown'), 'Exams': {}}
-
-                    marks = {v: (str(row.get(k, 0)).strip() if str(row.get(k, 0)).strip().upper() == 'AB' else row.get(k, 0))
-                             for k, v in fetch_subj_map.items()}
+                    marks = {v: (str(row.get(k, 0)).strip() if str(row.get(k, 0)).strip().upper() == 'AB'
+                                 else row.get(k, 0)) for k, v in fetch_subj_map.items()}
                     marks['Grand Total'] = str(row.get(t_col, '')) if t_col else ''
                     try:
                         raw_p = row.get(p_col, '')
-                        marks['%'] = str(round(float(raw_p), 2)) if raw_p != '' else str(raw_p)
+                        marks['%'] = str(round(float(raw_p), 2)) if raw_p != '' else ''
                     except:
                         marks['%'] = str(row.get(p_col, ''))
                     marks['Result'] = str(row.get(r_col, ''))
                     all_students[roll]['Exams'][config['label']] = marks
 
-        categories = ['FIRST UNIT TEST (25)', 'FIRST TERM EXAM (50)', 'SECOND UNIT TEST (25)',
-                      'ANNUAL EXAM (70/80)', 'INT/PRACTICAL (20/30)', 'Total Marks Out of 200',
-                      'Average Marks 200/2=100']
+        categories = [
+            'FIRST UNIT TEST (25)', 'FIRST TERM EXAM (50)', 'SECOND UNIT TEST (25)',
+            'ANNUAL EXAM (70/80)', 'INT/PRACTICAL (20/30)',
+            'Total Marks Out of 200', 'Average Marks 200/2=100'
+        ]
 
+        student_rolls = sorted(
+            all_students.keys(),
+            key=lambda x: float(x) if x.replace('.', '', 1).isdigit() else 0
+        )
+
+        # Build base dataframe
         rows = []
-        for roll in sorted(all_students.keys(), key=lambda x: float(x) if x.replace('.', '', 1).isdigit() else 0):
+        for roll in student_rolls:
             s = all_students[roll]
             for cat in categories:
-                row_data = {'Roll No.': roll if cat == 'FIRST UNIT TEST (25)' else '',
-                            'Column1': s['Name'] if cat == 'FIRST UNIT TEST (25)' else '',
-                            'Column2': cat}
+                row_data = {
+                    'Roll No.': roll if cat == 'FIRST UNIT TEST (25)' else '',
+                    'Column1':  s['Name'] if cat == 'FIRST UNIT TEST (25)' else '',
+                    'Column2':  cat
+                }
                 for col in subj_list + result_cols:
                     row_data[col] = ''
                 if cat in s['Exams']:
@@ -95,13 +104,10 @@ if uploaded_file:
         for col in base_df.columns:
             base_df[col] = base_df[col].astype(str).replace('nan', '')
 
-        # ─── Internal Marks Input Section ──────────────────────────────────────────
+        # ── Internal Marks Input ────────────────────────────────────────────────────
         st.markdown("---")
         st.subheader("📝 Enter Internal / Practical Marks (20/30)")
-        st.info("Fill in the internal/practical marks for each student below. These will be used to calculate totals, percentage, result and rank.")
-
-        student_rolls = [r for r in sorted(all_students.keys(),
-                          key=lambda x: float(x) if x.replace('.', '', 1).isdigit() else 0)]
+        st.info("Fill in the internal/practical marks for each student. These are used to compute totals, percentage, result and rank.")
 
         if 'internal_marks' not in st.session_state:
             st.session_state.internal_marks = {
@@ -109,11 +115,11 @@ if uploaded_file:
                 for roll in student_rolls
             }
 
-        int_cols = st.columns([1, 2] + [1]*6)
-        int_cols[0].markdown("**Roll No.**")
-        int_cols[1].markdown("**Student Name**")
+        hdr = st.columns([1, 2] + [1]*6)
+        hdr[0].markdown("**Roll No.**")
+        hdr[1].markdown("**Student Name**")
         for i, sub in enumerate(subj_list):
-            int_cols[i+2].markdown(f"**{sub}**")
+            hdr[i+2].markdown(f"**{sub}**")
 
         for roll in student_rolls:
             name = all_students[roll]['Name']
@@ -123,238 +129,235 @@ if uploaded_file:
             for i, sub in enumerate(subj_list):
                 val = cols[i+2].text_input(
                     label=f"{roll}-{sub}",
-                    value=st.session_state.internal_marks[roll][sub],
+                    value=st.session_state.internal_marks[roll].get(sub, "0"),
                     key=f"int_{roll}_{sub}",
                     label_visibility="collapsed"
                 )
                 st.session_state.internal_marks[roll][sub] = val
 
-        # Inject internal marks into base_df before showing editor
+        # Inject internal marks into base_df
         for i, roll in enumerate(student_rolls):
-            # INT row is index 4 in each 7-row block
-            block_start = i * 7
-            int_row_idx = block_start + 4
+            int_row_idx = i * 7 + 4
             for sub in subj_list:
                 base_df.at[int_row_idx, sub] = st.session_state.internal_marks[roll][sub]
 
         st.markdown("---")
-        st.subheader("📊 Marks Data Preview & Edit")
+        st.subheader("📊 Marks Preview & Edit")
         edited_df = st.data_editor(base_df, hide_index=True, use_container_width=True)
 
-        # ─── Generate Report ────────────────────────────────────────────────────────
+        # ── Generate Report ─────────────────────────────────────────────────────────
         if st.button("🚀 Generate Final Report & Rank"):
+
+            # Step 1: compute per-student results
+            student_results = []
+            for s_idx, roll in enumerate(student_rolls):
+                block = edited_df.iloc[s_idx*7 : s_idx*7+7].copy()
+                nums  = block.iloc[0:5][subj_list].applymap(clean_marks)
+                t200  = nums.sum()
+                a100  = t200.apply(lambda x: custom_round(x / 2))
+                gt    = int(a100.sum())
+                pc    = round((gt / 600) * 100, 2)
+                isp   = all(m >= 35 for m in a100)
+                student_results.append({
+                    'roll': roll,
+                    'name': all_students[roll]['Name'],
+                    't200': t200,
+                    'a100': a100,
+                    'gt':   gt,
+                    'pc':   pc,
+                    'pass': isp
+                })
+
+            # Step 2: compute dense rank (only PASS students)
+            pass_totals_sorted = sorted(
+                set(sr['gt'] for sr in student_results if sr['pass']),
+                reverse=True
+            )
+            rank_map = {gt_val: rank+1 for rank, gt_val in enumerate(pass_totals_sorted)}
+            for sr in student_results:
+                sr['rank'] = rank_map[sr['gt']] if sr['pass'] else ''
+
+            # Step 3: rebuild final_df
             processed = []
-            pass_list = []
-
-            for i in range(0, len(edited_df), 7):
-                block = edited_df.iloc[i:i+7].copy()
-                nums = block.iloc[0:5][subj_list].applymap(clean_marks)
-                t200 = nums.sum()
+            for s_idx, sr in enumerate(student_results):
+                block = edited_df.iloc[s_idx*7 : s_idx*7+7].copy().reset_index(drop=True)
+                t200, a100 = sr['t200'], sr['a100']
                 for sub in subj_list:
-                    block.iloc[5, block.columns.get_loc(sub)] = str(int(t200[sub]))
-                a100 = t200.apply(lambda x: custom_round(x / 2))
-                for sub in subj_list:
-                    block.iloc[6, block.columns.get_loc(sub)] = str(a100[sub])
-
-                gt = a100.sum()
-                pc = round((gt / 600) * 100, 2)
-                isp = all(m >= 35 for m in a100)
-                block.iloc[6, block.columns.get_loc('Grand Total')] = str(gt)
-                block.iloc[6, block.columns.get_loc('%')] = str(pc)
-                block.iloc[6, block.columns.get_loc('Result')] = "PASS" if isp else "FAIL"
+                    block.at[5, sub] = str(int(t200[sub]))
+                    block.at[6, sub] = str(int(a100[sub]))
+                block.at[6, 'Grand Total'] = str(sr['gt'])
+                block.at[6, '%']           = str(sr['pc'])
+                block.at[6, 'Result']      = "PASS" if sr['pass'] else "FAIL"
+                block.at[6, 'Rank']        = str(sr['rank'])
                 processed.append(block)
-                if isp:
-                    pass_list.append({'idx': i + 6, 'total': gt})
 
             final_df = pd.concat(processed).reset_index(drop=True)
-            pass_list.sort(key=lambda x: x['total'], reverse=True)
-            curr_r, last_t = 0, -1
-            for j, e in enumerate(pass_list):
-                if e['total'] != last_t:
-                    curr_r = j + 1
-                last_t = e['total']
-                final_df.at[e['idx'], 'Rank'] = str(curr_r)
 
-            st.success("✅ Report Generated! Ranks Applied.")
-            st.dataframe(final_df, use_container_width=True)
+            # Show summary
+            st.success(f"✅ Report Generated! {sum(1 for sr in student_results if sr['pass'])} students PASSED.")
+            summary_df = pd.DataFrame([{
+                'Roll No.':    sr['roll'],
+                'Name':        sr['name'],
+                'Grand Total': sr['gt'],
+                '%':           sr['pc'],
+                'Result':      'PASS' if sr['pass'] else 'FAIL',
+                'Rank':        sr['rank']
+            } for sr in student_results])
+            st.subheader("📋 Result Summary")
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
-            # ─── Build Excel with live formulas ────────────────────────────────────
+            # ── Build Excel with live formulas ─────────────────────────────────────
             wb = Workbook()
             ws = wb.active
             ws.title = "Consolidated"
 
+            # Hidden helper sheet: col A = GT values, col B = IsPass (1/0)
+            ws_h = wb.create_sheet("_RankHelper")
+            ws_h.sheet_state = "hidden"
+            ws_h.cell(row=1, column=1, value="GT")
+            ws_h.cell(row=1, column=2, value="IsPass")
+
             # Styles
-            header_font = Font(name="Arial", bold=True, size=11, color="FFFFFF")
-            header_fill = PatternFill("solid", start_color="1F4E79")
-            cat_font_map = {
-                'FIRST UNIT TEST (25)':     PatternFill("solid", start_color="DDEBF7"),
-                'FIRST TERM EXAM (50)':     PatternFill("solid", start_color="E2EFDA"),
-                'SECOND UNIT TEST (25)':    PatternFill("solid", start_color="FFF2CC"),
-                'ANNUAL EXAM (70/80)':      PatternFill("solid", start_color="FCE4D6"),
-                'INT/PRACTICAL (20/30)':    PatternFill("solid", start_color="EAD1DC"),
-                'Total Marks Out of 200':   PatternFill("solid", start_color="D9D9D9"),
-                'Average Marks 200/2=100':  PatternFill("solid", start_color="BDD7EE"),
+            hdr_font  = Font(name="Arial", bold=True, size=11, color="FFFFFF")
+            hdr_fill  = PatternFill("solid", start_color="1F4E79")
+            cat_fill  = {
+                'FIRST UNIT TEST (25)':    PatternFill("solid", start_color="DDEBF7"),
+                'FIRST TERM EXAM (50)':    PatternFill("solid", start_color="E2EFDA"),
+                'SECOND UNIT TEST (25)':   PatternFill("solid", start_color="FFF2CC"),
+                'ANNUAL EXAM (70/80)':     PatternFill("solid", start_color="FCE4D6"),
+                'INT/PRACTICAL (20/30)':   PatternFill("solid", start_color="EAD1DC"),
+                'Total Marks Out of 200':  PatternFill("solid", start_color="D9D9D9"),
+                'Average Marks 200/2=100': PatternFill("solid", start_color="BDD7EE"),
             }
-            thin = Border(
-                left=Side(style='thin'), right=Side(style='thin'),
-                top=Side(style='thin'), bottom=Side(style='thin')
-            )
-            center = Alignment(horizontal='center', vertical='center')
+            thin   = Border(left=Side(style='thin'), right=Side(style='thin'),
+                            top=Side(style='thin'),  bottom=Side(style='thin'))
+            ctr    = Alignment(horizontal='center', vertical='center')
 
             all_cols = ['Roll No.', 'Column1', 'Column2'] + subj_list + result_cols
-            headers = ['Roll No.', 'Student Name', 'Exam Type'] + subj_list + result_cols
-            for col_idx, header in enumerate(headers, 1):
-                cell = ws.cell(row=1, column=col_idx, value=header)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = center
-                cell.border = thin
+            hdrs     = ['Roll No.', 'Student Name', 'Exam Type'] + subj_list + result_cols
+            for ci, h in enumerate(hdrs, 1):
+                c = ws.cell(row=1, column=ci, value=h)
+                c.font=hdr_font; c.fill=hdr_fill; c.alignment=ctr; c.border=thin
 
-            # Column widths
-            col_widths = {'Roll No.': 10, 'Column1': 22, 'Column2': 28}
-            for sub in subj_list:
-                col_widths[sub] = 10
-            for rc in result_cols:
-                col_widths[rc] = 13
-            for col_idx, col_name in enumerate(all_cols, 1):
-                ws.column_dimensions[get_column_letter(col_idx)].width = col_widths.get(col_name, 12)
+            widths = {'Roll No.':10,'Column1':22,'Column2':28}
+            for sub in subj_list:  widths[sub] = 10
+            for rc  in result_cols: widths[rc]  = 13
+            for ci, cn in enumerate(all_cols, 1):
+                ws.column_dimensions[get_column_letter(ci)].width = widths.get(cn, 12)
 
-            # Subject columns (D to I = indices 4 to 9), result cols after
-            sub_col_start = 4  # column D
-            gt_col = sub_col_start + 6          # Grand Total column
-            pct_col = gt_col + 1                # % column
-            result_col = pct_col + 1            # Result column
-            rank_col = result_col + 3           # Rank column (after Remark)
+            SUB_S  = 4              # column D  (Sub1)
+            GT_C   = SUB_S + 6     # column J  (Grand Total)
+            PCT_C  = GT_C + 1      # column K  (%)
+            RES_C  = PCT_C + 1     # column L  (Result)
+            REM_C  = RES_C + 1     # column M  (Remark)
+            RNK_C  = REM_C + 1     # column N  (Rank)
 
-            # Map sub column letters
-            sub_letters = [get_column_letter(sub_col_start + i) for i in range(6)]
-            gt_letter = get_column_letter(gt_col)
-            pct_letter = get_column_letter(pct_col)
-            result_letter = get_column_letter(result_col)
-            rank_letter = get_column_letter(rank_col)
+            sub_lets = [get_column_letter(SUB_S + i) for i in range(6)]
+            gt_let   = get_column_letter(GT_C)
+            res_let  = get_column_letter(RES_C)
 
-            # Write data rows
-            num_students = len(student_rolls)
-            data_row = 2
+            n        = len(student_rolls)
+            h_gt_rng = f"_RankHelper!$A$2:$A${n+1}"   # helper GT range
 
-            # We'll collect avg row addresses for RANK formula later
-            avg_gt_cells = []  # list of grand total cell addresses for avg rows
+            avg_excel_rows = []   # track excel row of each student's avg row
 
             for s_idx, roll in enumerate(student_rolls):
-                block_start_row = data_row + s_idx * 7
-                name = all_students[roll]['Name']
+                sr   = student_results[s_idx]
+                brow = 2 + s_idx * 7   # first data row in Excel for this student
 
                 for cat_idx, cat in enumerate(categories):
-                    excel_row = block_start_row + cat_idx
-                    row_vals = final_df.iloc[s_idx * 7 + cat_idx]
+                    erow = brow + cat_idx
+                    fl   = cat_fill.get(cat, PatternFill("solid", start_color="FFFFFF"))
 
-                    # Roll No and Name only on first row of block
-                    ws.cell(row=excel_row, column=1, value=roll if cat_idx == 0 else "")
-                    ws.cell(row=excel_row, column=2, value=name if cat_idx == 0 else "")
-                    ws.cell(row=excel_row, column=3, value=cat)
-
-                    fill = cat_font_map.get(cat, PatternFill("solid", start_color="FFFFFF"))
+                    ws.cell(row=erow, column=1, value=roll if cat_idx==0 else "")
+                    ws.cell(row=erow, column=2, value=sr['name'] if cat_idx==0 else "")
+                    ws.cell(row=erow, column=3, value=cat)
 
                     if cat == 'Total Marks Out of 200':
-                        # SUM of rows above (rows 1-5 of this block)
-                        for i, sl in enumerate(sub_letters):
-                            r1 = block_start_row
-                            r5 = block_start_row + 4
-                            cell = ws.cell(row=excel_row, column=sub_col_start + i,
-                                           value=f"=SUM({sl}{r1}:{sl}{r5})")
-                            cell.fill = fill
-                            cell.border = thin
-                            cell.alignment = center
-                            cell.font = Font(name="Arial", bold=True)
-                        # No Grand Total / % / Result for this row
-                        for rc_i in range(len(result_cols)):
-                            c = ws.cell(row=excel_row, column=gt_col + rc_i, value="")
-                            c.fill = fill; c.border = thin
+                        r1, r5 = brow, brow+4
+                        for i, sl in enumerate(sub_lets):
+                            c = ws.cell(row=erow, column=SUB_S+i,
+                                        value=f"=SUM({sl}{r1}:{sl}{r5})")
+                            c.fill=fl; c.border=thin; c.alignment=ctr
+                            c.font=Font(name="Arial", bold=True)
+                        for ri in range(len(result_cols)):
+                            c=ws.cell(row=erow, column=GT_C+ri, value="")
+                            c.fill=fl; c.border=thin
 
                     elif cat == 'Average Marks 200/2=100':
-                        tot_row = excel_row - 1  # Total row just above
-                        for i, sl in enumerate(sub_letters):
-                            cell = ws.cell(row=excel_row, column=sub_col_start + i,
-                                           value=f"=ROUND({sl}{tot_row}/2,0)")
-                            cell.fill = fill; cell.border = thin; cell.alignment = center
-                            cell.font = Font(name="Arial", bold=True)
+                        trow = erow - 1
+                        for i, sl in enumerate(sub_lets):
+                            c = ws.cell(row=erow, column=SUB_S+i,
+                                        value=f"=ROUND({sl}{trow}/2,0)")
+                            c.fill=fl; c.border=thin; c.alignment=ctr
+                            c.font=Font(name="Arial", bold=True)
 
-                        # Grand Total = SUM of averaged subjects
-                        gt_cell = ws.cell(row=excel_row, column=gt_col,
-                                          value=f"=SUM({sub_letters[0]}{excel_row}:{sub_letters[-1]}{excel_row})")
-                        gt_cell.fill = fill; gt_cell.border = thin; gt_cell.alignment = center
-                        gt_cell.font = Font(name="Arial", bold=True, color="1F4E79")
+                        c = ws.cell(row=erow, column=GT_C,
+                                    value=f"=SUM({sub_lets[0]}{erow}:{sub_lets[-1]}{erow})")
+                        c.fill=fl; c.border=thin; c.alignment=ctr
+                        c.font=Font(name="Arial", bold=True, color="1F4E79")
 
-                        # %
-                        pct_cell = ws.cell(row=excel_row, column=pct_col,
-                                           value=f"=ROUND({gt_letter}{excel_row}/600*100,2)")
-                        pct_cell.fill = fill; pct_cell.border = thin; pct_cell.alignment = center
+                        c = ws.cell(row=erow, column=PCT_C,
+                                    value=f"=ROUND({gt_let}{erow}/600*100,2)")
+                        c.fill=fl; c.border=thin; c.alignment=ctr
 
-                        # Result: PASS if all sub averages >= 35
-                        pass_checks = ",".join([f'{sl}{excel_row}>=35' for sl in sub_letters])
-                        result_cell = ws.cell(row=excel_row, column=result_col,
-                                              value=f'=IF(AND({pass_checks}),"PASS","FAIL")')
-                        result_cell.fill = fill; result_cell.border = thin; result_cell.alignment = center
-                        result_cell.font = Font(name="Arial", bold=True)
+                        pass_chk = ",".join([f"{sl}{erow}>=35" for sl in sub_lets])
+                        c = ws.cell(row=erow, column=RES_C,
+                                    value=f'=IF(AND({pass_chk}),"PASS","FAIL")')
+                        c.fill=fl; c.border=thin; c.alignment=ctr
+                        c.font=Font(name="Arial", bold=True)
 
-                        # Remark blank
-                        ws.cell(row=excel_row, column=result_col + 1, value="").border = thin
-                        ws.cell(row=excel_row, column=result_col + 2, value="").border = thin
+                        c=ws.cell(row=erow, column=REM_C, value="")
+                        c.fill=fl; c.border=thin
 
-                        # Rank placeholder — will fill after all rows written
-                        avg_gt_cells.append((excel_row, f"{gt_letter}{excel_row}"))
+                        # Rank — filled below
+                        c=ws.cell(row=erow, column=RNK_C, value="")
+                        c.fill=fl; c.border=thin; c.alignment=ctr
+                        c.font=Font(name="Arial", bold=True, color="C00000")
 
-                        # Style rank cell
-                        rank_c = ws.cell(row=excel_row, column=rank_col, value="")
-                        rank_c.fill = fill; rank_c.border = thin; rank_c.alignment = center
-                        rank_c.font = Font(name="Arial", bold=True, color="C00000")
+                        # Helper sheet: point to this row's GT and Result
+                        h_row = s_idx + 2
+                        ws_h.cell(row=h_row, column=1,
+                                  value=f"=Consolidated!{gt_let}{erow}")
+                        ws_h.cell(row=h_row, column=2,
+                                  value=f'=IF(Consolidated!{res_let}{erow}="PASS",1,0)')
+
+                        avg_excel_rows.append((erow, h_row))
 
                     else:
-                        # Regular exam/internal row — write values from final_df
+                        frow = final_df.iloc[s_idx*7 + cat_idx]
                         for i, sub in enumerate(subj_list):
-                            v = row_vals.get(sub, "")
-                            try:
-                                v = float(v)
-                            except:
-                                pass
-                            cell = ws.cell(row=excel_row, column=sub_col_start + i, value=v)
-                            cell.fill = fill; cell.border = thin; cell.alignment = center
+                            v = frow.get(sub, "")
+                            try: v = float(v)
+                            except: pass
+                            c = ws.cell(row=erow, column=SUB_S+i, value=v)
+                            c.fill=fl; c.border=thin; c.alignment=ctr
 
-                        # Write result columns from final_df (non-formula rows)
-                        for rc_i, rc in enumerate(result_cols):
-                            v = row_vals.get(rc, "")
-                            if rc == 'Rank':
-                                v = ""  # blank for non-avg rows
-                            c = ws.cell(row=excel_row, column=gt_col + rc_i, value=v)
-                            c.fill = fill; c.border = thin; c.alignment = center
+                        for ri, rc in enumerate(result_cols):
+                            v = "" if rc == 'Rank' else frow.get(rc, "")
+                            c = ws.cell(row=erow, column=GT_C+ri, value=v)
+                            c.fill=fl; c.border=thin; c.alignment=ctr
 
-                    # Style Roll/Name/Category cells
-                    for col_i in [1, 2, 3]:
-                        c = ws.cell(row=excel_row, column=col_i)
-                        c.fill = fill; c.border = thin
-                        if col_i == 2:
-                            c.font = Font(name="Arial", bold=(cat_idx == 0))
-                        else:
-                            c.font = Font(name="Arial")
+                    for ci in [1, 2, 3]:
+                        c = ws.cell(row=erow, column=ci)
+                        c.fill=fl; c.border=thin
+                        c.font=Font(name="Arial", bold=(ci==2 and cat_idx==0))
 
-            # ── RANK formulas using RANK.EQ across all avg Grand Total cells ──
-            if avg_gt_cells:
-                gt_range = ",".join([addr for _, addr in avg_gt_cells])
-                # Build a named range string for RANK — use IF+LARGE approach for proper ranking
-                # Simpler: use RANK.EQ against the list of gt cells as an array
-                # We build a helper column approach using RANK.EQ with an array const
-                gt_addresses = [addr for _, addr in avg_gt_cells]
-                arr_str = "(" + ",".join(gt_addresses) + ")"
+            # ── RANK formulas ──────────────────────────────────────────────────────
+            # For each student:
+            #   IF IsPass=1,  COUNTIF(all_GT_range, ">" & this_GT) + 1,  ""
+            # This gives rank 1 to highest scorer, handles ties correctly.
+            # FAIL students get blank.
+            for (erow, h_row) in avg_excel_rows:
+                rank_formula = (
+                    f'=IF(_RankHelper!$B${h_row}=1,'
+                    f'COUNTIF({h_gt_rng},">"&_RankHelper!$A${h_row})+1,"")'
+                )
+                fl = cat_fill['Average Marks 200/2=100']
+                c  = ws.cell(row=erow, column=RNK_C, value=rank_formula)
+                c.fill=fl; c.border=thin; c.alignment=ctr
+                c.font=Font(name="Arial", bold=True, color="C00000")
 
-                for (avg_row, gt_addr) in avg_gt_cells:
-                    # Only rank if PASS
-                    rank_formula = (
-                        f'=IF({result_letter}{avg_row}="PASS",'
-                        f'RANK.EQ({gt_addr},{{{",".join(gt_addresses)}}},0),"")'
-                    )
-                    ws.cell(row=avg_row, column=rank_col, value=rank_formula)
-
-            # Freeze header row
             ws.freeze_panes = "A2"
 
             output = BytesIO()
