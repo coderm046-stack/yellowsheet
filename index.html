@@ -210,7 +210,12 @@ tbody tr:last-child td{border-bottom:none}
 <body>
 
 <header>
-  <div class="logo-mark">YS</div>
+  <div class="logo-mark" style="background:var(--navy);padding:2px;overflow:hidden">
+  <img src="maskable_icon_x192.png" alt="YS" id="header-logo-img"
+    style="width:100%;height:100%;object-fit:cover;border-radius:8px;display:block"
+    onerror="this.style.display='none';document.getElementById('header-logo-fb').style.display='flex'">
+  <span id="header-logo-fb" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:800;font-size:20px;color:var(--navy);background:var(--gold);border-radius:8px">YS</span>
+</div>
   <div class="header-text">
     <h1>Yellow Sheet</h1>
     <p>Student Exam Data Consolidator &nbsp;·&nbsp; Result Generator &nbsp;·&nbsp; PDF Slips</p>
@@ -297,7 +302,28 @@ tbody tr:last-child td{border-bottom:none}
       </div>
       <div>
         <label class="form-lbl">Academic Year</label>
-        <input type="text" id="acad-year" placeholder="e.g. 2024–25" oninput="state.academicYear=this.value">
+        <select id="acad-year" onchange="state.academicYear=this.value">
+          <option value="">— Select Year —</option>
+          <option value="2024-25">2024–25</option>
+          <option value="2025-26">2025–26</option>
+          <option value="2026-27">2026–27</option>
+          <option value="2027-28">2027–28</option>
+          <option value="2028-29">2028–29</option>
+          <option value="2029-30">2029–30</option>
+          <option value="2030-31">2030–31</option>
+          <option value="2031-32">2031–32</option>
+          <option value="2032-33">2032–33</option>
+          <option value="2033-34">2033–34</option>
+          <option value="2034-35">2034–35</option>
+          <option value="2035-36">2035–36</option>
+          <option value="2036-37">2036–37</option>
+          <option value="2037-38">2037–38</option>
+          <option value="2038-39">2038–39</option>
+          <option value="2039-40">2039–40</option>
+          <option value="2040-41">2040–41</option>
+          <option value="2041-42">2041–42</option>
+          <option value="2042-43">2042–43</option>
+        </select>
       </div>
     </div>
   </div>
@@ -421,8 +447,25 @@ const state={
   internalMarks:{},sheetStatus:{},allDfs:{},
   reportGenerated:false,studentResults:[],
   schoolName:'',className:'',sectionName:'',academicYear:'',
-  letterheadDataUrl:null,letterheadFormat:'PNG'
+  letterheadDataUrl:null,letterheadFormat:'PNG',
+  appIconDataUrl:null,appIconFormat:'PNG'
 };
+
+// ── Pre-load app icon for PDF use ──
+(function preloadAppIcon(){
+  const img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=()=>{
+    try{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth;c.height=img.naturalHeight;
+      const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
+      state.appIconDataUrl=c.toDataURL('image/png');
+      state.appIconFormat='PNG';
+    }catch(e){/* cross-origin blocked — use fallback YS mark */}
+  };
+  img.src='maskable_icon_x192.png';
+})();
 
 // ═══════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -1077,171 +1120,221 @@ function generateOnePDF(examLabel){
   doc.save(`YellowSheet${cls}${sec}_${safe}.pdf`);
 }
 
-// ── DRAW ONE SLIP ─────────────────────────────────────────────────────────
+// ── DRAW ONE SLIP — fully dynamic, uses every mm of space ────────────────
 function drawSlip(doc,slip,x,y,w,h,examTitle){
   const{sr,rows,indivPass}=slip;
   const hasSchoolName=!!state.schoolName;
   const hasLetterhead=!!state.letterheadDataUrl;
 
-  // Outer border
-  doc.setDrawColor(13,27,56);doc.setLineWidth(0.5);
+  // ── Outer border ────────────────────────────────────────────────────
+  doc.setDrawColor(13,27,56);doc.setLineWidth(0.6);
   doc.rect(x,y,w,h);
 
-  // ── HEADER BAND ──────────────────────────────────────────────────────
-  let HDR_H, EXAM_BAND_H=0;
+  // ═══ HEADER BLOCK ═══════════════════════════════════════════════════
+  let HDR_H=0, INFO_BAND_H=0, EXAM_BAND_H=0;
 
   if(hasLetterhead){
-    // Letterhead mode: letterhead image fills top band, exam title in sub-band
-    HDR_H=28;       // letterhead image height
-    EXAM_BAND_H=10; // exam title band below letterhead
-    // Draw letterhead spanning full slip width
+    HDR_H=26;           // letterhead image
+    INFO_BAND_H=8;      // class / section / year / faculty — gold on navy
+    EXAM_BAND_H=9;      // exam title — white on navy-mid
+    // Letterhead image (full width, auto-fit)
     try{
       doc.addImage(state.letterheadDataUrl,state.letterheadFormat,x,y,w,HDR_H,'','FAST');
     }catch(e){
-      // Fallback: navy band
       doc.setFillColor(13,27,56);doc.rect(x,y,w,HDR_H,'F');
-      doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont('helvetica','bold');
+      doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont('helvetica','bold');
       doc.text(state.schoolName||'School',x+w/2,y+HDR_H/2+2,{align:'center'});
     }
-    // Exam title sub-band
-    doc.setFillColor(37,61,120);
-    doc.rect(x,y+HDR_H,w,EXAM_BAND_H,'F');
-    doc.setTextColor(255,255,255);doc.setFontSize(9.5);doc.setFont('helvetica','bold');
-    doc.text(examTitle,x+w/2,y+HDR_H+7,{align:'center'});
-    // Class/Faculty in gold beneath exam title (inside band)
-    const sub=[
-      state.className?'Class '+state.className+(state.sectionName?' – '+state.sectionName:''):'',
+    // INFO band (class / section / year / faculty) — clearly visible
+    doc.setFillColor(13,27,56);
+    doc.rect(x,y+HDR_H,w,INFO_BAND_H,'F');
+    const infoParts=[
+      state.className?'Class '+state.className+(state.sectionName?' – Sec. '+state.sectionName:''):'',
       state.faculty?state.faculty+' Faculty':'',
       state.academicYear||''
-    ].filter(Boolean).join('  ·  ');
-    if(sub){
-      doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(245,193,88);
-      // We place this small text at bottom of exam band if space allows, else omit
-    }
+    ].filter(Boolean);
+    doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.setTextColor(245,193,88);
+    doc.text(infoParts.join('   |   '),x+w/2,y+HDR_H+5.5,{align:'center'});
+    // EXAM TITLE band
+    doc.setFillColor(37,61,120);
+    doc.rect(x,y+HDR_H+INFO_BAND_H,w,EXAM_BAND_H,'F');
+    doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont('helvetica','bold');
+    doc.text(examTitle,x+w/2,y+HDR_H+INFO_BAND_H+6.3,{align:'center'});
+
   } else {
-    // Standard mode: navy band with school name + exam title
-    HDR_H=hasSchoolName?28:18;
+    // Standard mode: navy band, YS/icon logo + school name + exam title
+    HDR_H = hasSchoolName ? 30 : 20;
     doc.setFillColor(13,27,56);
     doc.rect(x,y,w,HDR_H,'F');
 
-    const LOGO_SIZE=HDR_H-5;
-    const LOGO_X=x+2.5,LOGO_Y=y+2.5;
-    // YS mark (no logo)
-    doc.setFillColor(232,160,32);
-    doc.roundedRect(LOGO_X,LOGO_Y,LOGO_SIZE,LOGO_SIZE,1.5,1.5,'F');
-    doc.setTextColor(13,27,56);doc.setFontSize(9);doc.setFont('helvetica','bold');
-    doc.text('YS',LOGO_X+LOGO_SIZE/2,LOGO_Y+LOGO_SIZE/2+1.5,{align:'center'});
+    const ICON_SIZE=HDR_H-5;
+    const ICON_X=x+3,ICON_Y=y+2.5;
 
-    const logoRight=LOGO_X+LOGO_SIZE+3.5;
-    const contentW=w-logoRight+x-3;
-    const cx=logoRight+contentW/2;
+    // App icon or YS fallback
+    let iconDrawn=false;
+    if(state.appIconDataUrl){
+      try{
+        doc.addImage(state.appIconDataUrl,state.appIconFormat,ICON_X,ICON_Y,ICON_SIZE,ICON_SIZE);
+        iconDrawn=true;
+      }catch(e){}
+    }
+    if(!iconDrawn){
+      doc.setFillColor(232,160,32);
+      doc.roundedRect(ICON_X,ICON_Y,ICON_SIZE,ICON_SIZE,1.5,1.5,'F');
+      doc.setTextColor(13,27,56);doc.setFontSize(9);doc.setFont('helvetica','bold');
+      doc.text('YS',ICON_X+ICON_SIZE/2,ICON_Y+ICON_SIZE/2+1.5,{align:'center'});
+    }
+
+    const iconRight=ICON_X+ICON_SIZE+3.5;
+    const cx=iconRight+(w-(iconRight-x)-3)/2+iconRight-x; // center of content area
+    const contentCX=x+iconRight-x+(w-(iconRight-x))/2;
     doc.setTextColor(255,255,255);
     if(hasSchoolName){
       doc.setFontSize(10.5);doc.setFont('helvetica','bold');
-      const sn=state.schoolName.length>38?state.schoolName.substring(0,38)+'…':state.schoolName;
-      doc.text(sn,cx,y+8,{align:'center'});
-      const sub=[
+      const sn=state.schoolName.length>40?state.schoolName.substring(0,40)+'…':state.schoolName;
+      doc.text(sn,contentCX,y+9,{align:'center'});
+      const subParts=[
         state.className?'Class '+state.className+(state.sectionName?' – '+state.sectionName:''):'',
         state.faculty?state.faculty+' Faculty':'',
         state.academicYear||''
       ].filter(Boolean).join('  ·  ');
       doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(245,193,88);
-      if(sub)doc.text(sub,cx,y+13.5,{align:'center'});
-      doc.setFontSize(9.5);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
-      doc.text(examTitle,cx,y+21,{align:'center'});
+      if(subParts)doc.text(subParts,contentCX,y+14.5,{align:'center'});
+      doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
+      doc.text(examTitle,contentCX,y+22,{align:'center'});
     }else{
-      doc.setFontSize(10.5);doc.setFont('helvetica','bold');
-      doc.text(examTitle,cx,y+8.5,{align:'center'});
+      doc.setFontSize(11);doc.setFont('helvetica','bold');
+      doc.text(examTitle,contentCX,y+9,{align:'center'});
+      const subParts=[state.faculty?state.faculty+' Faculty':'',state.academicYear||''].filter(Boolean).join('  ·  ');
       doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.setTextColor(245,193,88);
-      const sub=[state.faculty?state.faculty+' Faculty':'',state.academicYear||''].filter(Boolean).join('  ·  ');
-      if(sub)doc.text(sub,cx,y+14,{align:'center'});
+      if(subParts)doc.text(subParts,contentCX,y+15,{align:'center'});
     }
   }
 
-  const totalHDR=HDR_H+(hasLetterhead?EXAM_BAND_H:0);
-  let cy=y+totalHDR+4;
+  // ═══ CONTENT AREA — dynamic layout ══════════════════════════════════
+  const totalHDR = HDR_H + INFO_BAND_H + EXAM_BAND_H;
+  const CONTENT_TOP = y + totalHDR;
 
-  // ── Roll / Name row ──────────────────────────────────────────────────
+  // Fixed height reservations (mm)
+  const PAD_TOP    = 3;   // gap after header
+  const ROLL_H     = 12;  // roll/name row + divider
+  const PASSFAIL_H = 14;  // pass/fail badge
+  const SIG_H      = 22;  // signature block at bottom
+  const TABLE_HDR  = 9;   // table column-header row
+  const PAD_MID    = 3;   // gap between table and pass/fail
+
+  const contentHeight = h - totalHDR;
+  const nDataRows = rows.length; // subjects + TOTAL + Percentage
+
+  // Available height for table data rows
+  const availForRows = contentHeight - PAD_TOP - ROLL_H - TABLE_HDR - PASSFAIL_H - PAD_MID - SIG_H;
+  // ROW_H: clamp between 7 and 14
+  const ROW_H = Math.min(14, Math.max(7, availForRows / nDataRows));
+  // Font scale based on ROW_H
+  const dataFontSz = Math.min(10.5, Math.max(7, ROW_H * 0.72));
+  const tblHdrFontSz = Math.min(9, Math.max(7, ROW_H * 0.68));
+  const rollFontSz = Math.min(10, Math.max(8, ROW_H * 0.78));
+
+  let cy = CONTENT_TOP + PAD_TOP;
+
+  // ── Roll / Name row ──────────────────────────────────────────────
   doc.setTextColor(30,30,30);
-  doc.setFontSize(8.5);doc.setFont('helvetica','bold');
-  doc.text('Roll No.: ',x+3,cy);
-  doc.setFont('helvetica','normal');doc.text(String(sr.roll),x+22,cy);
-  doc.setFont('helvetica','bold');doc.text('Name: ',x+w*0.36+2,cy);
+  doc.setFontSize(rollFontSz);doc.setFont('helvetica','bold');
+  doc.text('Roll No.:',x+3,cy+rollFontSz*0.35+1);
+  doc.setFont('helvetica','normal');doc.text(String(sr.roll),x+24,cy+rollFontSz*0.35+1);
+  doc.setFont('helvetica','bold');doc.text('Name:',x+w*0.38,cy+rollFontSz*0.35+1);
   doc.setFont('helvetica','normal');
-  const nm=sr.name.length>22?sr.name.substring(0,22)+'…':sr.name;
-  doc.text(nm,x+w*0.36+15,cy);
-  cy+=3;
-  doc.setDrawColor(13,27,56);doc.setLineWidth(0.4);
+  const maxNameChars=Math.floor((w*0.56)/(rollFontSz*0.42));
+  const nm=sr.name.length>maxNameChars?sr.name.substring(0,maxNameChars)+'…':sr.name;
+  doc.text(nm,x+w*0.38+14,cy+rollFontSz*0.35+1);
+  cy+=ROLL_H-3;
+  doc.setDrawColor(13,27,56);doc.setLineWidth(0.5);
   doc.line(x+2,cy,x+w-2,cy);
   cy+=3.5;
 
-  // ── Marks table ───────────────────────────────────────────────────────
-  const cW=[w*0.50,w*0.24,w*0.24];
+  // ── Marks table ───────────────────────────────────────────────────
+  const cW=[w*0.52,w*0.22,w*0.22];
   const cX=[x+2,x+2+cW[0],x+2+cW[0]+cW[1]];
-  const ROW_H=5.5,tblTopY=cy-1;
+  const tblTopY=cy-1;
 
-  // Header row
-  doc.setFillColor(37,61,120);doc.rect(x+2,cy-1,w-4,6,'F');
-  doc.setTextColor(255,255,255);doc.setFontSize(7.5);doc.setFont('helvetica','bold');
-  doc.text('Subject',cX[0]+1,cy+3.2);
-  doc.text('Max',cX[1]+cW[1]/2,cy+3.2,{align:'center'});
-  doc.text('Obtained',cX[2]+cW[2]/2,cy+3.2,{align:'center'});
-  cy+=7;
+  // Table header row
+  doc.setFillColor(13,27,56);doc.rect(x+2,cy-1,w-4,TABLE_HDR,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(tblHdrFontSz);doc.setFont('helvetica','bold');
+  doc.text('Subject',cX[0]+2,cy+TABLE_HDR*0.62);
+  doc.text('Max Marks',cX[1]+cW[1]/2,cy+TABLE_HDR*0.62,{align:'center'});
+  doc.text('Marks Obtained',cX[2]+cW[2]/2,cy+TABLE_HDR*0.62,{align:'center'});
+  cy+=TABLE_HDR+0.5;
 
-  // Data rows
+  // Data rows — stretched dynamically
   rows.forEach((row,ri)=>{
     const isTotal=row[0]==='TOTAL',isPct=row[0]==='Percentage';
-    if(isTotal)doc.setFillColor(200,200,200);
-    else if(isPct)doc.setFillColor(215,230,247);
-    else if(ri%2===1)doc.setFillColor(240,245,252);
+    if(isTotal)doc.setFillColor(220,220,220);
+    else if(isPct)doc.setFillColor(210,228,248);
+    else if(ri%2===1)doc.setFillColor(243,247,254);
     else doc.setFillColor(255,255,255);
     doc.rect(x+2,cy-1,w-4,ROW_H,'F');
-    doc.setTextColor(30,30,30);doc.setFontSize(7.5);
+    doc.setTextColor(30,30,30);
+    doc.setFontSize(dataFontSz);
     doc.setFont('helvetica',(isTotal||isPct)?'bold':'normal');
-    doc.text(row[0],cX[0]+1,cy+3.2);
-    doc.text(String(row[1]),cX[1]+cW[1]/2,cy+3.2,{align:'center'});
-    doc.text(String(row[2]),cX[2]+cW[2]/2,cy+3.2,{align:'center'});
+    const textY=cy+ROW_H*0.63;
+    doc.text(row[0],cX[0]+2,textY);
+    doc.text(String(row[1]),cX[1]+cW[1]/2,textY,{align:'center'});
+    // Colour-code obtained marks if failing
+    if(!isTotal&&!isPct&&row[2]!=='0'&&parseFloat(row[2])===0){
+      doc.setTextColor(150,150,150);
+    }
+    doc.text(String(row[2]),cX[2]+cW[2]/2,textY,{align:'center'});
+    doc.setTextColor(30,30,30);
     cy+=ROW_H;
   });
 
-  // Table border + column lines
-  doc.setDrawColor(180,180,180);doc.setLineWidth(0.2);
+  // Table border + column dividers
+  doc.setDrawColor(160,160,160);doc.setLineWidth(0.3);
   doc.rect(x+2,tblTopY,w-4,cy-tblTopY-0.5);
   cX.slice(1).forEach(tx=>doc.line(tx,tblTopY,tx,cy-0.5));
-  cy+=3;
+  cy+=PAD_MID;
 
-  // ── Pass / Fail box ────────────────────────────────────────────────
-  const boxX=x+w*.22,boxY=cy,boxW=w*.56,boxH=9;
-  const iconX=x+w*.22+5,iconCY=cy+4.5; // left icon position
+  // ── Pass / Fail badge — larger, prominent ─────────────────────────
+  const pf_x=x+w*0.15,pf_y=cy,pf_w=w*0.70,pf_h=PASSFAIL_H;
+  const pf_cx=pf_x+pf_w/2;
+  const pf_icon_x=pf_x+7,pf_icon_cy=pf_y+pf_h/2;
+  const pf_font=Math.min(14,Math.max(11,PASSFAIL_H*0.85));
+
   if(indivPass){
-    doc.setFillColor(220,245,225);doc.roundedRect(boxX,boxY,boxW,boxH,2,2,'F');
-    doc.setDrawColor(26,122,71);doc.setLineWidth(.5);doc.roundedRect(boxX,boxY,boxW,boxH,2,2,'S');
-    // Draw checkmark manually (no Unicode)
-    doc.setDrawColor(26,122,71);doc.setLineWidth(1.2);
-    doc.line(iconX,iconCY+0.5,iconX+1.8,iconCY+2.5);
-    doc.line(iconX+1.8,iconCY+2.5,iconX+5,iconCY-1.5);
-    doc.setTextColor(26,122,71);doc.setFontSize(11);doc.setFont('helvetica','bold');
-    doc.text('PASS',x+w*.5+2,cy+6,{align:'center'});
+    doc.setFillColor(214,244,223);doc.roundedRect(pf_x,pf_y,pf_w,pf_h,3,3,'F');
+    doc.setDrawColor(26,122,71);doc.setLineWidth(0.8);doc.roundedRect(pf_x,pf_y,pf_w,pf_h,3,3,'S');
+    // Checkmark icon
+    doc.setDrawColor(26,122,71);doc.setLineWidth(1.6);
+    doc.line(pf_icon_x,pf_icon_cy+0.5,pf_icon_x+2.2,pf_icon_cy+2.8);
+    doc.line(pf_icon_x+2.2,pf_icon_cy+2.8,pf_icon_x+6,pf_icon_cy-2);
+    doc.setTextColor(26,122,71);doc.setFontSize(pf_font);doc.setFont('helvetica','bold');
+    doc.text('PASS',pf_cx+3,pf_y+pf_h*0.67,{align:'center'});
   }else{
-    doc.setFillColor(253,230,230);doc.roundedRect(boxX,boxY,boxW,boxH,2,2,'F');
-    doc.setDrawColor(192,57,43);doc.setLineWidth(.5);doc.roundedRect(boxX,boxY,boxW,boxH,2,2,'S');
-    // Draw X manually (no Unicode)
-    doc.setDrawColor(192,57,43);doc.setLineWidth(1.2);
-    doc.line(iconX,iconCY-2,iconX+4,iconCY+2);
-    doc.line(iconX+4,iconCY-2,iconX,iconCY+2);
-    doc.setTextColor(192,57,43);doc.setFontSize(11);doc.setFont('helvetica','bold');
-    doc.text('FAIL',x+w*.5+2,cy+6,{align:'center'});
+    doc.setFillColor(253,228,228);doc.roundedRect(pf_x,pf_y,pf_w,pf_h,3,3,'F');
+    doc.setDrawColor(192,57,43);doc.setLineWidth(0.8);doc.roundedRect(pf_x,pf_y,pf_w,pf_h,3,3,'S');
+    // X icon
+    doc.setDrawColor(192,57,43);doc.setLineWidth(1.6);
+    doc.line(pf_icon_x,pf_icon_cy-2.5,pf_icon_x+5,pf_icon_cy+2.5);
+    doc.line(pf_icon_x+5,pf_icon_cy-2.5,pf_icon_x,pf_icon_cy+2.5);
+    doc.setTextColor(192,57,43);doc.setFontSize(pf_font);doc.setFont('helvetica','bold');
+    doc.text('FAIL',pf_cx+3,pf_y+pf_h*0.67,{align:'center'});
   }
 
-  // ── Signature lines ────────────────────────────────────────────────
-  const sigY=y+h-8;
-  doc.setDrawColor(180);doc.setLineWidth(.3);
-  doc.line(x+2,sigY-6,x+w-2,sigY-6);
-  doc.line(x+4,sigY-1,x+w*.44,sigY-1);
-  doc.line(x+w*.56,sigY-1,x+w-4,sigY-1);
-  doc.setTextColor(80);doc.setFontSize(7);doc.setFont('helvetica','normal');
-  doc.text('Class Teacher',x+w*.25,sigY+3.5,{align:'center'});
-  doc.text('Principal',x+w*.75,sigY+3.5,{align:'center'});
+  // ── Signature block — bottom-anchored ─────────────────────────────
+  const sigAreaY = y+h-SIG_H;
+  doc.setDrawColor(200);doc.setLineWidth(0.3);
+  doc.line(x+2,sigAreaY+2,x+w-2,sigAreaY+2); // divider line
+  const sigFontSz=Math.min(8.5,Math.max(6.5,ROW_H*0.58));
+  const sigLineY=sigAreaY+SIG_H*0.45;
+  const sigLabelY=sigAreaY+SIG_H*0.72;
+  // Left signature
+  doc.setDrawColor(120);doc.setLineWidth(0.4);
+  doc.line(x+6,sigLineY,x+w*0.44,sigLineY);
+  // Right signature
+  doc.line(x+w*0.56,sigLineY,x+w-6,sigLineY);
+  doc.setTextColor(80);doc.setFontSize(sigFontSz);doc.setFont('helvetica','normal');
+  doc.text('Class Teacher',x+w*0.25,sigLabelY,{align:'center'});
+  doc.text('Principal / H.M.',x+w*0.75,sigLabelY,{align:'center'});
   doc.setTextColor(30);
 }
 
