@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0D1B38">
 <meta name="description" content="Yellow Sheet — Student Exam Consolidator PWA">
 <meta name="mobile-web-app-capable" content="yes">
@@ -205,6 +205,33 @@ tbody tr:last-child td{border-bottom:none}
   .header-text p{display:none}
   #install-btn{font-size:.72rem;padding:6px 10px}
 }
+
+/* ── LANDSCAPE (phone rotated) ── */
+@media screen and (orientation:landscape) and (max-height:520px){
+  header{height:50px;padding:0 14px}
+  .logo-mark{width:36px;height:36px;font-size:16px}
+  .header-text h1{font-size:.95rem}
+  .header-text p{display:none}
+  #install-btn{font-size:.70rem;padding:5px 9px}
+  .stepper{overflow-x:auto}
+  .step-item{padding:9px 14px;font-size:.75rem}
+  .step-num{width:19px;height:19px;font-size:.68rem}
+  .main{padding:10px 14px 32px}
+  .card{padding:14px 16px;margin-bottom:12px}
+  .card-title{font-size:1rem}
+  .two-col{grid-template-columns:1fr 1fr}
+  .three-col{grid-template-columns:1fr 1fr 1fr}
+  .faculty-grid{grid-template-columns:repeat(3,1fr)}
+  .faculty-card{padding:12px 8px}
+  .faculty-icon{font-size:22px;margin-bottom:4px}
+  .faculty-name{font-size:.88rem}
+  .stats-bar{grid-template-columns:repeat(4,1fr);gap:8px}
+  .stat-num{font-size:1.4rem}
+  .upload-zone{padding:20px 16px}
+  .upload-icon{width:40px;height:40px;font-size:18px;margin-bottom:8px}
+  .actions-row{flex-wrap:wrap;gap:8px}
+  .btn-lg{padding:9px 18px;font-size:.85rem}
+}
 </style>
 </head>
 <body>
@@ -395,6 +422,30 @@ tbody tr:last-child td{border-bottom:none}
     <div class="alert alert-info">
       ℹ️ Max internal marks — <strong>Arts/Commerce:</strong> 20 per subject &nbsp;·&nbsp; <strong>Science sub 1-3:</strong> 20 &nbsp;·&nbsp; <strong>Science sub 4-6:</strong> 30 &nbsp;·&nbsp; <strong>🔵</strong> = optional subject column
     </div>
+
+    <!-- Mode Toggle -->
+    <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:.82rem;font-weight:600;color:var(--navy)">Input method:</span>
+      <button class="btn btn-primary" id="btn-mode-manual" onclick="setIntMode('manual')">✏️ Manual Entry</button>
+      <button class="btn btn-outline" id="btn-mode-import" onclick="setIntMode('import')">📂 Import from File</button>
+    </div>
+
+    <!-- Import Zone (hidden by default) -->
+    <div id="int-import-zone" style="display:none;margin-bottom:18px">
+      <div class="upload-zone" id="int-upload-zone" style="padding:28px 20px">
+        <input type="file" id="int-file-input" accept=".xlsx,.xls,.csv">
+        <div class="upload-icon" style="font-size:20px">📊</div>
+        <h3 style="font-size:.95rem">Drop Internal Marks file here</h3>
+        <p style="font-size:.78rem">Excel (.xlsx / .xls) or CSV — one row per student</p>
+        <div id="int-file-badge" style="margin-top:8px"></div>
+      </div>
+      <div class="alert alert-info" style="margin-top:12px;font-size:.82rem">
+        📋 <strong>Expected columns:</strong> <code>ROLL NO.</code> + subject abbreviations matching the faculty
+        (e.g. <code>ENG</code>, <code>MAR</code>, <code>GEO</code> …).
+        Any student not found in the file keeps their current marks (default 0).
+      </div>
+    </div>
+
     <div id="internal-marks-content" style="overflow-x:auto"></div>
   </div>
   <div class="actions-row">
@@ -807,6 +858,81 @@ function updateInternal(el){
   const roll=el.dataset.roll,abbr=el.dataset.abbr;
   if(!state.internalMarks[roll])state.internalMarks[roll]={};
   state.internalMarks[roll][abbr]=el.value;
+}
+
+// ── Internal Marks Import Mode ─────────────────────────────────────────
+function setIntMode(mode){
+  document.getElementById('btn-mode-manual').className='btn '+(mode==='manual'?'btn-primary':'btn-outline');
+  document.getElementById('btn-mode-import').className='btn '+(mode==='import'?'btn-primary':'btn-outline');
+  document.getElementById('int-import-zone').style.display=mode==='import'?'block':'none';
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const intInput=document.getElementById('int-file-input');
+  if(intInput){
+    intInput.addEventListener('change',e=>{if(e.target.files[0])handleInternalFile(e.target.files[0]);});
+  }
+  const iz=document.getElementById('int-upload-zone');
+  if(iz){
+    iz.addEventListener('dragover',e=>{e.preventDefault();iz.classList.add('drag');});
+    iz.addEventListener('dragleave',()=>iz.classList.remove('drag'));
+    iz.addEventListener('drop',e=>{
+      e.preventDefault();iz.classList.remove('drag');
+      const f=e.dataTransfer.files[0];
+      if(f)handleInternalFile(f);
+    });
+  }
+});
+
+function handleInternalFile(file){
+  if(!file.name.match(/\.(xlsx|xls|csv)$/i)){toast('Please upload an Excel or CSV file','error');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      let wb;
+      if(file.name.match(/\.csv$/i)){
+        wb=XLSX.read(e.target.result,{type:'string'});
+      }else{
+        wb=XLSX.read(e.target.result,{type:'array'});
+      }
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      let matched=0,skipped=0;
+      for(const row of rows){
+        // Normalise roll-number key
+        const roll=String(
+          row['ROLL NO.']||row['ROLL NO']||row['Roll No.']||
+          row['roll no']||row['Roll']||row['ROLL']||''
+        ).trim();
+        // Try a broader key search if still empty
+        const rollKey=Object.keys(row).find(k=>/roll/i.test(k));
+        const rollVal=roll||(rollKey?String(row[rollKey]).trim():'');
+        if(!rollVal||!state.internalMarks[rollVal]){skipped++;continue;}
+        const subjs=state.allStudents[rollVal]?.subjects||[];
+        for(const abbr of subjs){
+          // Try exact, lowercase, and common aliases
+          const aliases=[abbr,abbr.toLowerCase(),abbr.toUpperCase()];
+          for(const k of aliases){
+            if(row[k]!==undefined&&row[k]!==''){
+              state.internalMarks[rollVal][abbr]=String(row[k]);
+              break;
+            }
+          }
+        }
+        matched++;
+      }
+      renderInternalMarks();
+      document.getElementById('int-file-badge').innerHTML=
+        `<div class="file-badge">✅ ${file.name} — ${matched} student${matched!==1?'s':''} updated</div>`;
+      toast(`Internal marks imported: ${matched} student${matched!==1?'s':''} updated`,'success');
+      if(skipped>0)toast(`${skipped} row${skipped!==1?'s':''} skipped (roll number not found)`,'info');
+    }catch(err){
+      toast('Error reading file: '+err.message,'error');
+      console.error(err);
+    }
+  };
+  if(file.name.match(/\.csv$/i))reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1244,9 +1370,29 @@ function drawSlip(doc,slip,x,y,w,h,examTitle){
   doc.setFont('helvetica','normal');doc.text(String(sr.roll),x+24,cy+rollFontSz*0.35+1);
   doc.setFont('helvetica','bold');doc.text('Name:',x+w*0.38,cy+rollFontSz*0.35+1);
   doc.setFont('helvetica','normal');
-  const maxNameChars=Math.floor((w*0.56)/(rollFontSz*0.42));
-  const nm=sr.name.length>maxNameChars?sr.name.substring(0,maxNameChars)+'…':sr.name;
-  doc.text(nm,x+w*0.38+14,cy+rollFontSz*0.35+1);
+  // Adaptive font size so long names always fit without truncation
+  const nameX=x+w*0.38+14;
+  const nameAvailW=w-(w*0.38+14)-4; // mm available for name text
+  let nameFontSz=rollFontSz;
+  doc.setFontSize(nameFontSz);
+  // Scale font down until name fits (minimum 5.5pt)
+  while(nameFontSz>5.5){
+    const tw=doc.getStringUnitWidth(sr.name)*nameFontSz/doc.internal.scaleFactor;
+    if(tw<=nameAvailW)break;
+    nameFontSz-=0.4;
+    doc.setFontSize(nameFontSz);
+  }
+  // If still doesn't fit at minimum size, split to two lines within ROLL_H
+  const finalTW=doc.getStringUnitWidth(sr.name)*nameFontSz/doc.internal.scaleFactor;
+  if(finalTW>nameAvailW){
+    const nameLines=doc.splitTextToSize(sr.name,nameAvailW);
+    const lineH=nameFontSz*0.42;
+    doc.text(nameLines[0],nameX,cy+rollFontSz*0.35+1-lineH*0.4);
+    if(nameLines[1])doc.text(nameLines[1],nameX,cy+rollFontSz*0.35+1+lineH*0.9);
+  }else{
+    doc.text(sr.name,nameX,cy+rollFontSz*0.35+1);
+  }
+  doc.setFontSize(rollFontSz); // restore roll-row font
   cy+=ROLL_H-3;
   doc.setDrawColor(13,27,56);doc.setLineWidth(0.5);
   doc.line(x+2,cy,x+w-2,cy);
